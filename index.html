@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PDF Magnifier</title>
   <style>
-    /* Remove all default body margin/padding */
     html, body {
       margin: 0;
       padding: 0;
@@ -24,12 +23,12 @@
       display: block;
     }
 
-    /* The magnifier lens (25% bigger: 125×125) */
+    /* Adjust lens size as needed */
     .magnifier-lens {
       position: absolute;
       border: 3px solid #333;
       border-radius: 50%;
-      width: 125px; 
+      width: 125px;
       height: 125px;
       background: rgba(0, 0, 0, 0.1);
       cursor: none;
@@ -46,16 +45,15 @@
     <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
+  <!-- PDF.js (no integrity / crossorigin to avoid SRI mismatch errors) -->
   <script 
     src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"
     referrerpolicy="no-referrer">
   </script>
-  
+
   <script>
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
-
-    // pdfjsLib.GlobalWorkerOptions.workerSrc = '...'; // if needed
-
+    
     function getPDFUrlFromQuery() {
       const params = new URLSearchParams(window.location.search);
       return params.get('pdf');
@@ -69,6 +67,7 @@
     const ctx = canvas.getContext('2d');
     const pdfImage = document.getElementById('pdfImage');
 
+    // Load the PDF
     pdfjsLib.getDocument(pdfUrl).promise
       .then((pdf) => {
         pdfDoc = pdf;
@@ -78,7 +77,6 @@
         const viewport = page.getViewport({ scale: 1.5 });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-
         const renderContext = { canvasContext: ctx, viewport };
         return page.render(renderContext).promise;
       })
@@ -95,10 +93,11 @@
     function setupMagnifier(image) {
       const lens = document.getElementById('magnifierLens');
 
-      // Increase zoom to 2×
-      const zoom = 2; 
+      // Adjust zoom factor as desired
+      const zoom = 2;
 
       image.addEventListener('load', () => {
+        // Standard show/hide logic
         image.addEventListener('mousemove', moveLens);
         image.addEventListener('touchmove', moveLens);
         image.addEventListener('mouseenter', () => lens.style.display = 'block');
@@ -106,6 +105,7 @@
         image.addEventListener('mouseleave', () => lens.style.display = 'none');
         image.addEventListener('touchend', () => lens.style.display = 'none');
 
+        // Set up the background
         lens.style.backgroundImage = `url(${image.src})`;
         lens.style.backgroundSize = 
           `${image.width * zoom}px ${image.height * zoom}px`;
@@ -113,32 +113,38 @@
 
       function moveLens(e) {
         e.preventDefault();
-        const pos = getCursorPos(e, image);
-        let x = pos.x - (lens.offsetWidth / 2);
-        let y = pos.y - (lens.offsetHeight / 2);
 
-        // Boundaries
+        const pos = getCursorPos(e, image);
+
+        // Place the lens above the cursor
+        // horizontally centered on cursor.x
+        let x = pos.x - (lens.offsetWidth / 2);
+        // lens is "above" cursor by lens.height + 10 px
+        let y = pos.y - lens.offsetHeight - 10;
+
+        // Clamp so lens doesn't go outside the image
         if (x > image.width - lens.offsetWidth) x = image.width - lens.offsetWidth;
         if (x < 0) x = 0;
         if (y > image.height - lens.offsetHeight) y = image.height - lens.offsetHeight;
         if (y < 0) y = 0;
 
-        lens.style.left = x + 'px';
-        lens.style.top = y + 'px';
-        lens.style.backgroundPosition = `-${x * zoom}px -${y * zoom}px`;
+        lens.style.left = x + "px";
+        lens.style.top = y + "px";
+
+        lens.style.backgroundPosition = 
+          `-${(x) * zoom}px -${(y) * zoom}px`;
       }
 
       function getCursorPos(e, image) {
         const rect = image.getBoundingClientRect();
         let x = e.pageX - rect.left;
         let y = e.pageY - rect.top;
-
         x -= window.pageXOffset;
         y -= window.pageYOffset;
-
         return { x, y };
       }
     }
   </script>
+
 </body>
 </html>
