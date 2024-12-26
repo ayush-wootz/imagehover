@@ -3,12 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>JavaScript Magnifier Example</title>
-  
+  <title>PDF to Image Magnifier</title>
   <style>
-    /* 
-      Basic Reset 
-    */
+    /* Basic reset */
     * {
       margin: 0;
       padding: 0;
@@ -22,7 +19,7 @@
     }
 
     h1 {
-      margin-bottom: 20px;
+      margin-bottom: 1rem;
     }
 
     .magnifier-container {
@@ -30,164 +27,166 @@
       max-width: 600px;   /* Restrict container width if needed */
     }
 
-    .magnifier-container img {
+    /* Our main rendered image (converted from PDF) */
+    #pdfImage {
       width: 100%;
       display: block;
     }
 
-    /* 
-      The lens that hovers over the image. 
-      We make it a circle or square with a border and a semi-transparent background 
-      so users can see where they are magnifying.
-    */
+    /* The magnifier lens */
     .magnifier-lens {
       position: absolute;
       border: 3px solid #333;
       border-radius: 50%;
-      /* Change the lens size here (width/height) */
       width: 100px;
       height: 100px;
-      /* 
-        Optional background to show the lens area 
-        is separate. You can also remove this for 
-        a fully transparent lens. 
-      */
       background: rgba(0, 0, 0, 0.1);
-      cursor: none; /* We’ll hide the cursor inside the lens */
-      pointer-events: none; /* So lens doesn’t interfere with mousemove */
-    }
-
-    /* 
-      The magnified image container that sits above everything 
-      inside the lens. We'll absolutely position a background-image 
-      to create the zoom effect.
-    */
-    .magnifier-lens::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-repeat: no-repeat;
-      background-position: 0 0;
-      border-radius: 50%;
-    }
-
-    /* 
-      Feel free to tweak transition or box-shadow for smoother style. 
-    */
-    .magnifier-lens {
-      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      cursor: none;
+      pointer-events: none; /* So the lens doesn’t block mouse events on the image */
+      display: none;        /* Hidden until PDF is loaded or hovered */
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
     }
   </style>
 </head>
 <body>
 
-  <h1>JavaScript Magnifier Example</h1>
+  <h1>PDF Magnifier Demo</h1>
 
   <div class="magnifier-container">
-    <!-- Replace the src with your own high-resolution image URL -->
-    <img id="myImage" src="https://via.placeholder.com/1200x800.png?text=High+Res+Image" alt="Magnifiable" />
-    <div class="magnifier-lens" id="myLens"></div>
+    <!-- The final "image" we’ll show after converting PDF page to data URL -->
+    <img id="pdfImage" src="" alt="PDF Page" />
+    <!-- The lens overlay -->
+    <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
+  <p>
+    Pass a <code>pdf</code> parameter in the URL to specify the PDF location.<br>
+    Example: 
+    <code>
+      ?pdf=https://example.com/yourfile.pdf
+    </code>
+  </p>
+
+  <!-- 1. Include PDF.js from a CDN (for demonstration) -->
+  <!-- NOTE: Check https://mozilla.github.io/pdf.js/ for updated URLs/versions -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js" 
+          integrity="sha512-h4PQ/G3tfRgTwFNZ0bz+UEVds2KuWChMrHDKL5lK/c0nHHvAcdaOldBrWg7dQiknsjRw5Nsy7vHzVXayr4Byyw==" 
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  
   <script>
-    (function() {
-      // Get references to elements
-      const img = document.getElementById("myImage");
-      const lens = document.getElementById("myLens");
+    // --------------------------------------------------------------
+    // 1. GET THE "pdf" QUERY PARAM (i.e., the PDF URL)
+    // --------------------------------------------------------------
+    function getPDFUrlFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('pdf');
+    }
+    const pdfUrl = getPDFUrlFromQuery() || 
+      'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'; // fallback
+    
+    // --------------------------------------------------------------
+    // 2. RENDER THE PDF'S FIRST PAGE INTO A CANVAS
+    // --------------------------------------------------------------
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    // If needed, specify the workerSrc (some builds require it)
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
 
-      // Adjust zoom factor here
-      const zoom = 3; 
+    let pdfDoc = null;
+    let pageRendering = false;
 
-      // When the image loads, initialize
-      img.addEventListener("load", initMagnifier);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const pdfImage = document.getElementById('pdfImage');
 
-      function initMagnifier() {
-        // Set lens ::after background to the image source
-        lens.style.setProperty("--magnifier-image", `url(${img.src})`);
+    // We'll load the PDF, then render the first page
+    pdfjsLib.getDocument(pdfUrl).promise.then((pdf) => {
+      pdfDoc = pdf;
+      // Render the first page
+      return pdfDoc.getPage(1);
+    }).then((page) => {
+      const viewport = page.getViewport({ scale: 1.5 }); // Increase scale for higher resolution
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
 
-        // We also set the background on the lens pseudo-element (in code):
-        // We'll do it by injecting into lens::after via style attribute.
-        // A simpler approach is to set it once in your CSS, but let's do it dynamically:
-        lens.style.setProperty(
-          "background-image",
-          `url("${img.src}")`
-        );
-        
-        // We don't directly apply background-image to lens, but to lens::after
-        // so we do it using lens.style.setProperty with the "::after" pseudo-element 
-        // in a style block if needed. For simplicity here, we’ll just set background-image 
-        // on the lens and then manage background-position in the script.
+      // Render page into canvas
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
+      };
 
-        // Listen for mouse events on the image container
-        img.addEventListener("mousemove", moveLens);
-        img.addEventListener("touchmove", moveLens);
+      pageRendering = page.render(renderContext);
+      return pageRendering.promise;
+    }).then(() => {
+      // Done rendering => convert canvas to data URL => set as <img> src
+      const dataUrl = canvas.toDataURL('image/png');
+      pdfImage.src = dataUrl;
 
-        // Also hide lens if mouse leaves
-        img.addEventListener("mouseleave", hideLens);
-        img.addEventListener("touchend", hideLens);
+      // Now that we have an actual "image" in pdfImage, let's set up magnifier
+      setupMagnifier(pdfImage);
+    }).catch((err) => {
+      console.error('Error loading or rendering PDF:', err);
+      // Show fallback or error message
+      pdfImage.alt = 'Failed to load PDF. Check console for details.';
+    });
 
-        // Show lens if mouse enters
-        img.addEventListener("mouseenter", showLens);
-        img.addEventListener("touchstart", showLens);
+    // --------------------------------------------------------------
+    // 3. SETUP THE MAGNIFIER LENS ON THE IMAGE
+    // --------------------------------------------------------------
+    function setupMagnifier(image) {
+      const lens = document.getElementById('magnifierLens');
+      const zoom = 2.5;  // Adjust your zoom factor
 
-        // Prepare the ratio between lens background-size and normal image
-        // We'll calculate the ratio based on the image width & height
-        const cx = (lens.offsetWidth * zoom) / lens.offsetWidth;
-        const cy = (lens.offsetHeight * zoom) / lens.offsetHeight;
+      // Wait until image is fully loaded in the DOM
+      image.addEventListener("load", () => {
+        // Show lens on hover, hide on mouseleave
+        image.addEventListener("mousemove", moveLens);
+        image.addEventListener("touchmove", moveLens);
+        image.addEventListener("mouseenter", () => lens.style.display = "block");
+        image.addEventListener("touchstart", () => lens.style.display = "block");
+        image.addEventListener("mouseleave", () => lens.style.display = "none");
+        image.addEventListener("touchend", () => lens.style.display = "none");
 
-        // Actually set the background size
+        // Set the background image for the lens
+        lens.style.backgroundImage = `url(${image.src})`;
+
+        // Adjust the background size for zoom effect
         lens.style.backgroundSize = 
-          `${img.width * zoom}px ${img.height * zoom}px`;
+          `${image.width * zoom}px ${image.height * zoom}px`;
+      });
 
-        function moveLens(e) {
-          e.preventDefault();
+      function moveLens(e) {
+        e.preventDefault();
 
-          // Get the position of the cursor relative to the image
-          const pos = getCursorPos(e);
-          
-          // Calculate lens position (top-left)
-          let x = pos.x - lens.offsetWidth / 2;
-          let y = pos.y - lens.offsetHeight / 2;
+        // (x, y) position of cursor within the image
+        const pos = getCursorPos(e, image);
+        let x = pos.x - (lens.offsetWidth / 2);
+        let y = pos.y - (lens.offsetHeight / 2);
 
-          // Prevent lens from going outside the image
-          if (x > img.width - lens.offsetWidth) {x = img.width - lens.offsetWidth;}
-          if (x < 0) {x = 0;}
-          if (y > img.height - lens.offsetHeight) {y = img.height - lens.offsetHeight;}
-          if (y < 0) {y = 0;}
+        // Prevent lens from going outside the image
+        if (x > image.width - lens.offsetWidth) { x = image.width - lens.offsetWidth; }
+        if (x < 0) { x = 0; }
+        if (y > image.height - lens.offsetHeight) { y = image.height - lens.offsetHeight; }
+        if (y < 0) { y = 0; }
 
-          // Position the lens
-          lens.style.left = x + "px";
-          lens.style.top = y + "px";
+        // Position the lens
+        lens.style.left = x + "px";
+        lens.style.top = y + "px";
 
-          // Move the background image inside the lens
-          lens.style.backgroundPosition = 
-            `-${x * zoom}px -${y * zoom}px`;
-        }
-
-        function getCursorPos(e) {
-          // For simplicity, assume the bounding box from the top-left of the page
-          const rect = img.getBoundingClientRect();
-          let x = e.pageX - rect.left;
-          let y = e.pageY - rect.top;
-
-          // Considering any page scrolling
-          x = x - window.pageXOffset;
-          y = y - window.pageYOffset;
-          return { x: x, y: y };
-        }
-
-        function showLens() {
-          lens.style.display = "block";
-        }
-
-        function hideLens() {
-          lens.style.display = "none";
-        }
+        // Move the magnified background image
+        lens.style.backgroundPosition = `-${x * zoom}px -${y * zoom}px`;
       }
-    })();
+
+      function getCursorPos(e, image) {
+        const rect = image.getBoundingClientRect();
+        let x = e.pageX - rect.left;
+        let y = e.pageY - rect.top;
+
+        x = x - window.pageXOffset;
+        y = y - window.pageYOffset;
+
+        return { x: x, y: y };
+      }
+    }
   </script>
 </body>
 </html>
