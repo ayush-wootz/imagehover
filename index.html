@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF to Image Magnifier</title>
+  <title>PDF Magnifier Demo</title>
   <style>
     /* Basic reset */
     * {
@@ -42,7 +42,7 @@
       height: 100px;
       background: rgba(0, 0, 0, 0.1);
       cursor: none;
-      pointer-events: none; /* So the lens doesn’t block mouse events on the image */
+      pointer-events: none; /* So the lens doesn’t block mouse events */
       display: none;        /* Hidden until PDF is loaded or hovered */
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
     }
@@ -60,51 +60,44 @@
   </div>
 
   <p>
-    Pass a <code>pdf</code> parameter in the URL to specify the PDF location.<br>
-    Example: 
+    Pass a <code>pdf</code> parameter in the URL to specify the PDF location.
+    <br>Example:
     <code>
       ?pdf=https://example.com/yourfile.pdf
     </code>
   </p>
 
-  <!-- 1. Include PDF.js from a CDN (for demonstration) -->
-  <!-- NOTE: Check https://mozilla.github.io/pdf.js/ for updated URLs/versions -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js" 
-          integrity="sha512-h4PQ/G3tfRgTwFNZ0bz+UEVds2KuWChMrHDKL5lK/c0nHHvAcdaOldBrWg7dQiknsjRw5Nsy7vHzVXayr4Byyw==" 
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  
+  <!-- PDF.js (without integrity / crossorigin) -->
+  <script 
+    src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"
+    referrerpolicy="no-referrer">
+  </script>
   <script>
-    // --------------------------------------------------------------
+    // Optionally set workerSrc if needed (some PDF.js builds require it explicitly)
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = 
+    //   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
+
     // 1. GET THE "pdf" QUERY PARAM (i.e., the PDF URL)
-    // --------------------------------------------------------------
     function getPDFUrlFromQuery() {
       const params = new URLSearchParams(window.location.search);
       return params.get('pdf');
     }
-    const pdfUrl = getPDFUrlFromQuery() || 
+    const pdfUrl = getPDFUrlFromQuery() ||
       'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'; // fallback
-    
-    // --------------------------------------------------------------
+
     // 2. RENDER THE PDF'S FIRST PAGE INTO A CANVAS
-    // --------------------------------------------------------------
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
-    // If needed, specify the workerSrc (some builds require it)
-    // pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
-
     let pdfDoc = null;
-    let pageRendering = false;
-
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const pdfImage = document.getElementById('pdfImage');
 
-    // We'll load the PDF, then render the first page
     pdfjsLib.getDocument(pdfUrl).promise.then((pdf) => {
       pdfDoc = pdf;
       // Render the first page
       return pdfDoc.getPage(1);
     }).then((page) => {
-      const viewport = page.getViewport({ scale: 1.5 }); // Increase scale for higher resolution
+      const viewport = page.getViewport({ scale: 1.5 }); // Increase scale for better resolution
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
@@ -113,30 +106,24 @@
         canvasContext: ctx,
         viewport: viewport
       };
-
-      pageRendering = page.render(renderContext);
-      return pageRendering.promise;
+      return page.render(renderContext).promise;
     }).then(() => {
       // Done rendering => convert canvas to data URL => set as <img> src
       const dataUrl = canvas.toDataURL('image/png');
       pdfImage.src = dataUrl;
 
-      // Now that we have an actual "image" in pdfImage, let's set up magnifier
+      // Now that we have an actual "image", let's set up the magnifier
       setupMagnifier(pdfImage);
     }).catch((err) => {
       console.error('Error loading or rendering PDF:', err);
-      // Show fallback or error message
-      pdfImage.alt = 'Failed to load PDF. Check console for details.';
+      pdfImage.alt = 'Failed to load or render PDF. Check console for details.';
     });
 
-    // --------------------------------------------------------------
     // 3. SETUP THE MAGNIFIER LENS ON THE IMAGE
-    // --------------------------------------------------------------
     function setupMagnifier(image) {
       const lens = document.getElementById('magnifierLens');
       const zoom = 2.5;  // Adjust your zoom factor
 
-      // Wait until image is fully loaded in the DOM
       image.addEventListener("load", () => {
         // Show lens on hover, hide on mouseleave
         image.addEventListener("mousemove", moveLens);
@@ -157,7 +144,6 @@
       function moveLens(e) {
         e.preventDefault();
 
-        // (x, y) position of cursor within the image
         const pos = getCursorPos(e, image);
         let x = pos.x - (lens.offsetWidth / 2);
         let y = pos.y - (lens.offsetHeight / 2);
@@ -168,11 +154,9 @@
         if (y > image.height - lens.offsetHeight) { y = image.height - lens.offsetHeight; }
         if (y < 0) { y = 0; }
 
-        // Position the lens
         lens.style.left = x + "px";
         lens.style.top = y + "px";
 
-        // Move the magnified background image
         lens.style.backgroundPosition = `-${x * zoom}px -${y * zoom}px`;
       }
 
