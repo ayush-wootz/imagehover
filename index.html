@@ -13,14 +13,12 @@
       width: 100%;
     }
 
-    /* Container takes full width, no extra margin */
     .magnifier-container {
       position: relative;
       width: 100%;
       max-width: none; /* So it doesn't cap at 600px */
     }
 
-    /* The rendered PDF page (as an image) fills container width */
     #pdfImage {
       width: 100%;
       display: block;
@@ -31,8 +29,8 @@
       position: absolute;
       border: 3px solid #333;
       border-radius: 50%;
-      width: 125px; /* was 100px */
-      height: 125px; /* was 100px */
+      width: 125px; 
+      height: 125px;
       background: rgba(0, 0, 0, 0.1);
       cursor: none;
       pointer-events: none;
@@ -43,36 +41,26 @@
 </head>
 <body>
 
-  <!-- No extra text or headings -->
-
   <div class="magnifier-container">
-    <!-- Image that shows the rendered PDF -->
     <img id="pdfImage" src="" alt="PDF Page" />
-    <!-- Lens overlay -->
     <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
-  <!-- PDF.js (no integrity or crossorigin to avoid SRI errors) -->
   <script 
     src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"
     referrerpolicy="no-referrer">
   </script>
   
   <script>
-    // pdfjsLib from the window
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
 
-    // Optional: If needed, set workerSrc
-    // pdfjsLib.GlobalWorkerOptions.workerSrc = 
-    //   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = '...'; // if needed
 
-    // Get ?pdf=... from the URL
     function getPDFUrlFromQuery() {
       const params = new URLSearchParams(window.location.search);
       return params.get('pdf');
     }
 
-    // Fallback PDF if none specified
     const pdfUrl = getPDFUrlFromQuery() ||
       'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
@@ -81,14 +69,12 @@
     const ctx = canvas.getContext('2d');
     const pdfImage = document.getElementById('pdfImage');
 
-    // Load and render the first page of the PDF
     pdfjsLib.getDocument(pdfUrl).promise
       .then((pdf) => {
         pdfDoc = pdf;
-        return pdfDoc.getPage(1); // first page
+        return pdfDoc.getPage(1);
       })
       .then((page) => {
-        // Render at scale=1.5 for good resolution
         const viewport = page.getViewport({ scale: 1.5 });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -97,11 +83,8 @@
         return page.render(renderContext).promise;
       })
       .then(() => {
-        // Convert canvas to an in-memory image
         const dataUrl = canvas.toDataURL('image/png');
         pdfImage.src = dataUrl;
-
-        // Setup magnifier once the image is loaded
         setupMagnifier(pdfImage);
       })
       .catch((err) => {
@@ -109,15 +92,13 @@
         pdfImage.alt = 'Failed to load or render the PDF.';
       });
 
-    // Magnifier setup
     function setupMagnifier(image) {
       const lens = document.getElementById('magnifierLens');
 
-      // Zoom factor reduced by 50% (was 2.5, now 1.25)
-      const zoom = 1.25; 
+      // Increase zoom to 2×
+      const zoom = 2; 
 
       image.addEventListener('load', () => {
-        // Show lens on hover, hide on mouse/touch leave
         image.addEventListener('mousemove', moveLens);
         image.addEventListener('touchmove', moveLens);
         image.addEventListener('mouseenter', () => lens.style.display = 'block');
@@ -125,26 +106,22 @@
         image.addEventListener('mouseleave', () => lens.style.display = 'none');
         image.addEventListener('touchend', () => lens.style.display = 'none');
 
-        // Set lens background to the rendered image
         lens.style.backgroundImage = `url(${image.src})`;
-        
-        // Update background size for the new zoom
         lens.style.backgroundSize = 
           `${image.width * zoom}px ${image.height * zoom}px`;
       });
 
       function moveLens(e) {
         e.preventDefault();
-
         const pos = getCursorPos(e, image);
         let x = pos.x - (lens.offsetWidth / 2);
         let y = pos.y - (lens.offsetHeight / 2);
 
-        // Prevent the lens from going outside the image
-        if (x > image.width - lens.offsetWidth) { x = image.width - lens.offsetWidth; }
-        if (x < 0) { x = 0; }
-        if (y > image.height - lens.offsetHeight) { y = image.height - lens.offsetHeight; }
-        if (y < 0) { y = 0; }
+        // Boundaries
+        if (x > image.width - lens.offsetWidth) x = image.width - lens.offsetWidth;
+        if (x < 0) x = 0;
+        if (y > image.height - lens.offsetHeight) y = image.height - lens.offsetHeight;
+        if (y < 0) y = 0;
 
         lens.style.left = x + 'px';
         lens.style.top = y + 'px';
