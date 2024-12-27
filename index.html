@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF Magnifier Above Cursor</title>
+  <title>PDF Magnifier with Fixed Lens and Cursor Outline</title>
   <style>
     html, body {
       margin: 0;
@@ -23,17 +23,32 @@
       display: block;
     }
 
+    /* The lens is fixed in the top-right corner */
     .magnifier-lens {
-      position: absolute;
+      position: fixed;
+      top: 20px; /* Adjust as needed */
+      right: 20px; /* Adjust as needed */
+      width: 240px; 
+      height: 240px;
       border: 1px solid #333;
       border-radius: 10%;
-      width: 240px;
-      height: 240px;
       background: rgba(0, 0, 0, 0.1);
-      cursor: none;       /* hide the default cursor inside lens area */
+      cursor: none;       /* hide default cursor */
       pointer-events: none;  /* lens won't block mouse events */
       display: none;
       box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      z-index: 9999; /* Topmost */
+      background-repeat: no-repeat;
+    }
+
+    /* Black outline around the cursor */
+    .cursor-outline {
+      position: absolute;
+      border: 2px solid black; /* Black border */
+      pointer-events: none;    /* Does not block interactions */
+      box-sizing: border-box;  /* Includes border in dimensions */
+      display: none;
+      z-index: 9998; /* Just below the lens */
     }
   </style>
 </head>
@@ -41,6 +56,11 @@
 
   <div class="magnifier-container">
     <img id="pdfImage" src="" alt="PDF Page" />
+
+    <!-- The dashed rectangle around the cursor -->
+    <div class="cursor-outline" id="cursorOutline"></div>
+
+    <!-- The lens that shows the zoomed-in content -->
     <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
@@ -67,6 +87,8 @@
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const pdfImage = document.getElementById('pdfImage');
+    const lens = document.getElementById('magnifierLens');
+    const cursorOutline = document.getElementById('cursorOutline');
     let pdfDoc = null;
 
     // 2) Load the PDF, render the first page to a canvas
@@ -94,25 +116,24 @@
         pdfImage.alt = 'Failed to load or render PDF.';
       });
 
-    // 3) Setup the magnifier that appears above the cursor
+    // 3) Setup the magnifier and cursor outline
     function setupMagnifier(image) {
-      const lens = document.getElementById('magnifierLens');
-
       // Zoom factor
-      const zoom = 4; 
+      const zoom = 4;
 
       image.addEventListener('load', () => {
-        // Standard lens show/hide
+        // Show/hide elements
         image.addEventListener('mousemove', moveLens);
-        image.addEventListener('touchmove', moveLens);
+        image.addEventListener('mouseenter', () => {
+          lens.style.display = 'block';
+          cursorOutline.style.display = 'block';
+        });
+        image.addEventListener('mouseleave', () => {
+          lens.style.display = 'none';
+          cursorOutline.style.display = 'none';
+        });
 
-        image.addEventListener('mouseenter', () => lens.style.display = 'block');
-        image.addEventListener('touchstart', () => lens.style.display = 'block');
-
-        image.addEventListener('mouseleave', () => lens.style.display = 'none');
-        image.addEventListener('touchend',   () => lens.style.display = 'none');
-
-        // Set the lens background to our rendered PDF image
+        // Set lens background to the rendered PDF image
         lens.style.backgroundImage = `url(${image.src})`;
         lens.style.backgroundSize =
           `${image.width * zoom}px ${image.height * zoom}px`;
@@ -120,31 +141,33 @@
 
       function moveLens(e) {
         e.preventDefault();
-        
-        // (pos.x, pos.y) is the cursor's position relative to the image
+
+        // Get cursor position relative to the image
         const pos = getCursorPos(e, image);
 
-        // Place lens physically above the cursor:
-        // - horizontally center the lens on the cursor
-        // - lens is above by lens.height + 10px
-        let lensX = pos.x - lens.offsetWidth / 2;
-        let lensY = pos.y - lens.offsetHeight - 10;
+        // 1. Update the cursor outline (scaled down by zoom factor)
+        const outlineWidth = lens.offsetWidth / zoom;
+        const outlineHeight = lens.offsetHeight / zoom;
 
-        // Prevent lens from going out of the image bounds
-        if (lensX < 0) lensX = 0;
-        if (lensY < 0) lensY = 0;
-        if (lensX > image.width - lens.offsetWidth) {
-          lensX = image.width - lens.offsetWidth;
+        let outlineX = pos.x - outlineWidth / 2;
+        let outlineY = pos.y - outlineHeight / 2;
+
+        // Clamp the outline to stay within the image bounds
+        if (outlineX < 0) outlineX = 0;
+        if (outlineY < 0) outlineY = 0;
+        if (outlineX > image.width - outlineWidth) {
+          outlineX = image.width - outlineWidth;
         }
-        if (lensY > image.height - lens.offsetHeight) {
-          lensY = image.height - lens.offsetHeight;
+        if (outlineY > image.height - outlineHeight) {
+          outlineY = image.height - outlineHeight;
         }
 
-        lens.style.left = lensX + 'px';
-        lens.style.top = lensY + 'px';
+        cursorOutline.style.width = `${outlineWidth}px`;
+        cursorOutline.style.height = `${outlineHeight}px`;
+        cursorOutline.style.left = `${outlineX}px`;
+        cursorOutline.style.top = `${outlineY}px`;
 
-        // BUT the area we magnify is still around the pointer:
-        // so we offset the background so that the pointer is the center
+        // 2. Update the lens background (fixed position, but zooming dynamically)
         const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
         const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
 
