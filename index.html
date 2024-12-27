@@ -1,209 +1,187 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Free-form Selection and Copy Text</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PDF Magnifier with Click-to-Zoom</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+    }
 
-        #pdf-container {
-            position: relative;
-            width: 100%;
-            height: 100vh;
-            overflow: auto;
-        }
+    .magnifier-container {
+      position: relative;
+      width: 100%;
+      max-width: none; /* so it fills the screen width */
+    }
 
-        .selection-box {
-            position: absolute;
-            border: 2px dashed #FF0000;
-            background-color: rgba(255, 0, 0, 0.2);
-            pointer-events: none;
-            z-index: 9999;
-            display: none;
-        }
+    #pdfImage {
+      width: 100%;
+      display: block;
+    }
 
-        #pdfCanvas {
-            display: block;
-            margin: 0 auto;
-        }
+    /* The lens is fixed in the top-right corner */
+    .magnifier-lens {
+      position: fixed;
+      top: 10px; /* Adjust as needed */
+      right: 10px; /* Adjust as needed */
+      width: 320px; /* Reduced size */
+      height: 180px; /* Reduced size */
+      border: 1px solid #333;
+      border-radius: 10%;
+      background: rgba(0, 0, 0, 0.1);
+      cursor: none;       /* hide default cursor */
+      pointer-events: none;  /* lens won't block mouse events */
+      display: none;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      z-index: 9999; /* Topmost */
+      background-repeat: no-repeat;
+    }
 
-        #copyButton {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 999;
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 10px;
-            cursor: pointer;
-        }
-
-        #copyButton:hover {
-            background: #218838;
-        }
-
-    </style>
+    /* Translucent filled box around the cursor */
+    .cursor-outline {
+      position: absolute;
+      background: rgba(255, 0, 255, 0.2); /* Translucent black fill */
+      border: 0px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
+      pointer-events: none;    /* Does not block interactions */
+      box-sizing: border-box;  /* Includes border in dimensions */
+      display: none;
+      z-index: 9998; /* Just below the lens */
+    }
+  </style>
 </head>
 <body>
-    <div id="pdf-container">
-        <canvas id="pdfCanvas"></canvas>
-        <div id="textLayer" class="textLayer"></div>
-    </div>
 
-    <button id="copyButton">Copy Selected Text</button>
+  <div class="magnifier-container">
+    <img id="pdfImage" src="" alt="PDF Page" />
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+    <!-- The translucent box around the cursor -->
+    <div class="cursor-outline" id="cursorOutline"></div>
 
-    <script>
-        const pdfUrl = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'; // Replace with your PDF URL
-        const canvas = document.getElementById('pdfCanvas');
-        const context = canvas.getContext('2d');
-        const textLayer = document.getElementById('textLayer');
-        const copyButton = document.getElementById('copyButton');
-        let pdfDoc = null;
-        let currentPage = 1;
-        let selectionPolygon = []; // Array to store points for free-form selection
-        let selectionBox = null;
+    <!-- The lens that shows the zoomed-in content -->
+    <div class="magnifier-lens" id="magnifierLens"></div>
+  </div>
 
-        // Load the PDF
-        pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
-            pdfDoc = pdf;
-            renderPage(currentPage);
-        });
+  <!-- PDF.js (no integrity or crossorigin to avoid SRI mismatch) -->
+  <script 
+    src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"
+    referrerpolicy="no-referrer">
+  </script>
 
-        // Render the PDF page
-        function renderPage(pageNum) {
-            pdfDoc.getPage(pageNum).then(page => {
-                const viewport = page.getViewport({ scale: 1.5 });
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
+  <script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
 
-                const renderContext = {
-                    canvasContext: context,
-                    viewport: viewport
-                };
-                page.render(renderContext).promise.then(() => {
-                    renderTextLayer(page, viewport);
-                });
-            });
-        }
+    // OPTIONAL: Set the PDF worker if your environment needs it
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = '...';
 
-        // Render text layer
-        function renderTextLayer(page, viewport) {
-            page.getTextContent().then(textContent => {
-                const div = document.createElement('div');
-                div.classList.add('textLayer');
-                textLayer.appendChild(div);
+    // 1) Get the PDF URL from ?pdf=
+    function getPDFUrlFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('pdf');
+    }
+    const pdfUrl = getPDFUrlFromQuery() ||
+      'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
-                pdfjsLib.renderTextLayer({
-                    textContent,
-                    container: div,
-                    viewport,
-                    textDivs: []
-                });
-            });
-        }
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const pdfImage = document.getElementById('pdfImage');
+    const lens = document.getElementById('magnifierLens');
+    const cursorOutline = document.getElementById('cursorOutline');
+    let pdfDoc = null;
 
-        // Handle mouse down event to start free-form selection
-        canvas.addEventListener('mousedown', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const startX = e.clientX - rect.left;
-            const startY = e.clientY - rect.top;
+    let isFixed = false; // Tracks whether the zoomed view is fixed
+    let fixedPosition = { x: 0, y: 0 }; // Stores fixed zoom position
 
-            selectionPolygon = [{ x: startX, y: startY }];
-            if (selectionBox) {
-                selectionBox.style.display = 'none';
-            }
+    // 2) Load the PDF, render the first page to a canvas
+    pdfjsLib.getDocument(pdfUrl).promise
+      .then(pdf => {
+        pdfDoc = pdf;
+        return pdf.getPage(1);
+      })
+      .then(page => {
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        return page.render({
+          canvasContext: ctx,
+          viewport
+        }).promise;
+      })
+      .then(() => {
+        // Convert canvas to data URL and display as an <img>
+        pdfImage.src = canvas.toDataURL('image/png');
+        setupMagnifier(pdfImage);
+      })
+      .catch(err => {
+        console.error('PDF render error:', err);
+        pdfImage.alt = 'Failed to load or render PDF.';
+      });
 
-            // Create a new selection box for visual feedback
-            selectionBox = document.createElement('div');
-            selectionBox.classList.add('selection-box');
-            selectionBox.style.left = `${startX}px`;
-            selectionBox.style.top = `${startY}px`;
-            document.body.appendChild(selectionBox);
+    // 3) Setup the magnifier and cursor outline
+    function setupMagnifier(image) {
+      const zoom = 4; // Set zoom level
 
-            // Track mouse movement to update the selection box
-            const mouseMoveHandler = (moveEvent) => {
-                const width = moveEvent.clientX - rect.left - startX;
-                const height = moveEvent.clientY - rect.top - startY;
+      image.addEventListener('load', () => {
+        // Show cursor outline and magnifier on hover
+        image.addEventListener('mousemove', moveLens);
+        image.addEventListener('click', toggleFixedZoom);
+        document.addEventListener('click', resetZoom);
 
-                selectionPolygon.push({ x: moveEvent.clientX - rect.left, y: moveEvent.clientY - rect.top });
+        lens.style.backgroundImage = `url(${image.src})`;
+        lens.style.backgroundSize =
+          `${image.width * zoom}px ${image.height * zoom}px`;
+      });
 
-                selectionBox.style.width = `${Math.abs(width)}px`;
-                selectionBox.style.height = `${Math.abs(height)}px`;
-                if (width < 0) selectionBox.style.left = `${moveEvent.clientX - rect.left}px`;
-                if (height < 0) selectionBox.style.top = `${moveEvent.clientY - rect.top}px`;
-            };
+      function moveLens(e) {
+        if (isFixed) return; // Skip if zoom is fixed
+        updateLensAndOutline(getCursorPos(e, image));
+      }
 
-            // Stop tracking mouse movement on mouse up
-            const mouseUpHandler = () => {
-                canvas.removeEventListener('mousemove', mouseMoveHandler);
-                document.removeEventListener('mouseup', mouseUpHandler);
-                selectionBox.style.display = 'none'; // Hide the selection box after release
-                getTextInsidePolygon();
-            };
+      function toggleFixedZoom(e) {
+        e.stopPropagation(); // Prevent event from reaching document
+        const pos = getCursorPos(e, image);
+        isFixed = true;
+        fixedPosition = pos;
+        updateLensAndOutline(pos);
+      }
 
-            canvas.addEventListener('mousemove', mouseMoveHandler);
-            document.addEventListener('mouseup', mouseUpHandler);
-        });
+      function resetZoom(e) {
+        if (e.target === pdfImage) return; // Ignore clicks on the image
+        isFixed = false;
+        lens.style.display = 'none';
+        cursorOutline.style.display = 'none';
+      }
 
-        // Get text inside the selected polygon
-        function getTextInsidePolygon() {
-            if (selectionPolygon.length < 3) return;
+      function updateLensAndOutline(pos) {
+        // Update the cursor outline
+        const outlineWidth = lens.offsetWidth / zoom;
+        const outlineHeight = lens.offsetHeight / zoom;
+        const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
+        const outlineY = Math.max(0, Math.min(pos.y - outlineHeight / 2, image.height - outlineHeight));
+        cursorOutline.style.width = `${outlineWidth}px`;
+        cursorOutline.style.height = `${outlineHeight}px`;
+        cursorOutline.style.left = `${outlineX}px`;
+        cursorOutline.style.top = `${outlineY}px`;
+        cursorOutline.style.display = 'block';
 
-            const selectedArea = new Path2D();
-            selectionPolygon.forEach(point => selectedArea.lineTo(point.x, point.y));
-            selectedArea.closePath();
+        // Update the lens
+        const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
+        const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
+        lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
+        lens.style.display = 'block';
+      }
 
-            const page = pdfDoc.getPage(currentPage);
-            page.then((page) => {
-                const viewport = page.getViewport({ scale: 1.5 });
-                page.getTextContent().then((textContent) => {
-                    const textItems = textContent.items;
-                    let selectedText = '';
-
-                    textItems.forEach(item => {
-                        const x = item.transform[4];
-                        const y = item.transform[5];
-                        const width = item.width;
-                        const height = item.height;
-
-                        // Check if the text item's coordinates are inside the polygon
-                        if (isPointInsidePolygon(x, y, selectedArea)) {
-                            selectedText += item.str + ' ';
-                        }
-                    });
-
-                    if (selectedText) {
-                        navigator.clipboard.writeText(selectedText.trim()).then(() => {
-                            alert('Text copied to clipboard!');
-                        }).catch((err) => {
-                            console.error('Error copying text: ', err);
-                        });
-                    }
-                });
-            });
-        }
-
-        // Function to check if a point is inside a polygon
-        function isPointInsidePolygon(x, y, polygon) {
-            const ctx = document.createElement('canvas').getContext('2d');
-            ctx.beginPath();
-            polygon.forEach(point => ctx.lineTo(point.x, point.y));
-            ctx.closePath();
-            return ctx.isPointInPath(x, y);
-        }
-
-        // Button click event to copy selected text
-        copyButton.addEventListener('click', () => {
-            getTextInsidePolygon();
-        });
-    </script>
+      function getCursorPos(e, image) {
+        const rect = image.getBoundingClientRect();
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+      }
+    }
+  </script>
 </body>
 </html>
