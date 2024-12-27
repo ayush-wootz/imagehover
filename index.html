@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF Magnifier (Boundary + Fixed Lens)</title>
+  <title>PDF Magnifier Above Cursor</title>
   <style>
     html, body {
       margin: 0;
@@ -15,8 +15,7 @@
     .magnifier-container {
       position: relative;
       width: 100%;
-      max-width: none; /* So it fills the screen width */
-      overflow: visible; /* Ensure boundary won't be clipped */
+      max-width: none; /* so it fills the screen width */
     }
 
     #pdfImage {
@@ -24,34 +23,17 @@
       display: block;
     }
 
-    /* The dashed rectangle showing the zoom boundary around the cursor */
-    .zoom-boundary {
-      position: absolute;
-      border: 2px dashed red;
-      width: 60px;    /* same as before */
-      height: 60px;   /* same as before */
-      pointer-events: none;
-      box-sizing: border-box;
-      display: none;
-      z-index: 9998;  /* beneath the lens (9999), above the PDF */
-    }
-
-    /* The lens is now fixed in the top-right corner of the window */
     .magnifier-lens {
-      position: fixed;          /* <--- changed from absolute */
-      top: 20px;                /* Pin to top */
-      right: 20px;              /* Pin to right */
-      width: 240px; 
-      height: 240px;
-      border: 2px solid #333;
+      position: absolute;
+      border: 3px solid #333;
       border-radius: 10%;
+      width: 200px;
+      height: 100px;
       background: rgba(0, 0, 0, 0.1);
-      cursor: none;
-      pointer-events: none;
+      cursor: none;       /* hide the default cursor inside lens area */
+      pointer-events: none;  /* lens won't block mouse events */
       display: none;
       box-shadow: 0 0 10px rgba(0,0,0,0.3);
-      z-index: 9999; 
-      background-repeat: no-repeat;
     }
   </style>
 </head>
@@ -59,15 +41,10 @@
 
   <div class="magnifier-container">
     <img id="pdfImage" src="" alt="PDF Page" />
-
-    <!-- The dashed rectangle showing the zoom boundary -->
-    <div class="zoom-boundary" id="zoomBoundary"></div>
-
-    <!-- The lens that actually shows the zoomed-in content (fixed in top-right) -->
     <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
-  <!-- PDF.js from CDN -->
+  <!-- PDF.js (no integrity or crossorigin to avoid SRI mismatch) -->
   <script 
     src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"
     referrerpolicy="no-referrer">
@@ -76,7 +53,10 @@
   <script>
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
 
-    // 1) Get ?pdf=... from the URL
+    // OPTIONAL: Set the PDF worker if your environment needs it
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = '...';
+
+    // 1) Get the PDF URL from ?pdf=
     function getPDFUrlFromQuery() {
       const params = new URLSearchParams(window.location.search);
       return params.get('pdf');
@@ -84,15 +64,12 @@
     const pdfUrl = getPDFUrlFromQuery() ||
       'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
-    // Refs
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
     const pdfImage = document.getElementById('pdfImage');
-    const lens     = document.getElementById('magnifierLens');
-    const boundary = document.getElementById('zoomBoundary');
-    const canvas   = document.createElement('canvas');
-    const ctx      = canvas.getContext('2d');
-    let pdfDoc     = null;
+    let pdfDoc = null;
 
-    // 2) Render PDF page -> Canvas -> <img>
+    // 2) Load the PDF, render the first page to a canvas
     pdfjsLib.getDocument(pdfUrl).promise
       .then(pdf => {
         pdfDoc = pdf;
@@ -100,11 +77,15 @@
       })
       .then(page => {
         const viewport = page.getViewport({ scale: 1.5 });
-        canvas.width  = viewport.width;
+        canvas.width = viewport.width;
         canvas.height = viewport.height;
-        return page.render({ canvasContext: ctx, viewport }).promise;
+        return page.render({
+          canvasContext: ctx,
+          viewport
+        }).promise;
       })
       .then(() => {
+        // Convert canvas to data URL and display as an <img>
         pdfImage.src = canvas.toDataURL('image/png');
         setupMagnifier(pdfImage);
       })
@@ -113,66 +94,59 @@
         pdfImage.alt = 'Failed to load or render PDF.';
       });
 
-    // 3) Setup the boundary & lens
+    // 3) Setup the magnifier that appears above the cursor
     function setupMagnifier(image) {
-      // Example zoom factor
-      const zoom = 4;
+      const lens = document.getElementById('magnifierLens');
+
+      // Zoom factor
+      const zoom = 4; 
 
       image.addEventListener('load', () => {
-        // Show/hide
-        image.addEventListener('mouseenter', () => {
-          boundary.style.display = 'block';
-          lens.style.display = 'block';
-        });
-        image.addEventListener('mouseleave', () => {
-          boundary.style.display = 'none';
-          lens.style.display = 'none';
-        });
-
+        // Standard lens show/hide
         image.addEventListener('mousemove', moveLens);
         image.addEventListener('touchmove', moveLens);
 
-        // Lens background (the entire PDF image scaled up)
+        image.addEventListener('mouseenter', () => lens.style.display = 'block');
+        image.addEventListener('touchstart', () => lens.style.display = 'block');
+
+        image.addEventListener('mouseleave', () => lens.style.display = 'none');
+        image.addEventListener('touchend',   () => lens.style.display = 'none');
+
+        // Set the lens background to our rendered PDF image
         lens.style.backgroundImage = `url(${image.src})`;
-        lens.style.backgroundSize = 
+        lens.style.backgroundSize =
           `${image.width * zoom}px ${image.height * zoom}px`;
       });
 
       function moveLens(e) {
         e.preventDefault();
-
-        // Cursor position in the image
+        
+        // (pos.x, pos.y) is the cursor's position relative to the image
         const pos = getCursorPos(e, image);
 
-        // 1) Move the boundary around the cursor (60×60 is the area being magnified)
-        const bw = boundary.offsetWidth;  // 60
-        const bh = boundary.offsetHeight; // 60
-        const halfBW = bw / 2, halfBH = bh / 2;
-        let boundaryX = pos.x - halfBW;
-        let boundaryY = pos.y - halfBH;
+        // Place lens physically above the cursor:
+        // - horizontally center the lens on the cursor
+        // - lens is above by lens.height + 10px
+        let lensX = pos.x - lens.offsetWidth / 2;
+        let lensY = pos.y - lens.offsetHeight - 10;
 
-        // Clamp boundary so it doesn't go off the image
-        if (boundaryX < 0) boundaryX = 0;
-        if (boundaryY < 0) boundaryY = 0;
-        if (boundaryX > image.width - bw) {
-          boundaryX = image.width - bw;
+        // Prevent lens from going out of the image bounds
+        if (lensX < 0) lensX = 0;
+        if (lensY < 0) lensY = 0;
+        if (lensX > image.width - lens.offsetWidth) {
+          lensX = image.width - lens.offsetWidth;
         }
-        if (boundaryY > image.height - bh) {
-          boundaryY = image.height - bh;
+        if (lensY > image.height - lens.offsetHeight) {
+          lensY = image.height - lens.offsetHeight;
         }
 
-        boundary.style.left = boundaryX + 'px';
-        boundary.style.top  = boundaryY + 'px';
+        lens.style.left = lensX + 'px';
+        lens.style.top = lensY + 'px';
 
-        // 2) Since lens is pinned top-right, we do NOT reposition it. 
-        //    We only update the background offset to magnify the correct region.
-
-        // The lens should center on (pos.x, pos.y) in the PDF.
-        // That means a background shift of:
-        const lensW = lens.offsetWidth;   // 240
-        const lensH = lens.offsetHeight;  // 240
-        const bgX = -(pos.x * zoom) + (lensW / 2);
-        const bgY = -(pos.y * zoom) + (lensH / 2);
+        // BUT the area we magnify is still around the pointer:
+        // so we offset the background so that the pointer is the center
+        const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
+        const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
 
         lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
       }
