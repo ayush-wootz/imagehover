@@ -39,14 +39,12 @@
       box-shadow: 0 0 10px rgba(0,0,0,0.3);
       z-index: 9999; /* Topmost */
       background-repeat: no-repeat;
-      opacity: 0.2; /* Default opacity for moving cursor */
-      transition: opacity 0.1s ease; /* Smooth opacity transition */
     }
 
     /* Translucent filled box around the cursor */
     .cursor-outline {
       position: absolute;
-      background: rgba(255, 255, 0, 0.2); /* Translucent black fill */
+      background: rgba(255, 0, 0, 0.2); /* Translucent black fill */
       border: 0px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
       pointer-events: none;    /* Does not block interactions */
       box-sizing: border-box;  /* Includes border in dimensions */
@@ -96,7 +94,6 @@
 
     let isFixed = false; // Tracks whether the zoomed view is fixed
     let fixedPosition = { x: 0, y: 0 }; // Stores fixed zoom position
-    let cursorTimer = null; // Timer to detect cursor stability
 
     // 2) Load the PDF, render the first page to a canvas
     pdfjsLib.getDocument(pdfUrl).promise
@@ -140,20 +137,7 @@
 
       function moveLens(e) {
         if (isFixed) return; // Skip if zoom is fixed
-        
-        // Reset the lens opacity to 20% when the cursor is moving
-        lens.style.opacity = 0.2;
-        cursorOutline.style.opacity = 0.2;
-
-        // Clear any previous timer
-        clearTimeout(cursorTimer);
-
-        // Set a timer to show the lens after 1 second of stability
-        cursorTimer = setTimeout(() => {
-          lens.style.opacity = 1; // Fully visible when stable for 1 second
-          cursorOutline.style.opacity = 1;
-          updateLensAndOutline(getCursorPos(e, image));
-        }, 1000); // 1 second delay
+        updateLensAndOutline(getCursorPos(e, image));
       }
 
       function toggleFixedZoom(e) {
