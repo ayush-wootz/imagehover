@@ -48,7 +48,7 @@
       border: 0px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
       pointer-events: none;    /* Does not block interactions */
       box-sizing: border-box;  /* Includes border in dimensions */
-      display: none; /* Initially hidden */
+      display: none;
       z-index: 9998; /* Just below the lens */
     }
   </style>
@@ -92,8 +92,8 @@
     const cursorOutline = document.getElementById('cursorOutline');
     let pdfDoc = null;
 
-    let isFixed = false; // Tracks whether the zoomed view is fixed
-    let fixedPosition = { x: 0, y: 0 }; // Stores fixed zoom position
+    let isZoomed = false; // Track zoom state
+    let zoomPos = { x: 0, y: 0 }; // Store zoom position
 
     // 2) Load the PDF, render the first page to a canvas
     pdfjsLib.getDocument(pdfUrl).promise
@@ -125,38 +125,34 @@
       const zoom = 4; // Set zoom level
 
       image.addEventListener('load', () => {
-        // Show cursor outline on hover, but not magnifier lens
-        image.addEventListener('mousemove', moveLens);
-        image.addEventListener('click', toggleFixedZoom);
-        document.addEventListener('click', resetZoom);
-
-        lens.style.backgroundImage = `url(${image.src})`;
-        lens.style.backgroundSize =
-          `${image.width * zoom}px ${image.height * zoom}px`;
+        // Show cursor outline on hover
+        image.addEventListener('mousemove', moveCursorOutline);
+        image.addEventListener('click', toggleMagnifier);
+        document.addEventListener('click', hideMagnifier);
       });
 
-      function moveLens(e) {
-        if (isFixed) return; // Skip if zoom is fixed
-        updateLensAndOutline(getCursorPos(e, image));
+      function moveCursorOutline(e) {
+        if (isZoomed) return; // Skip if zoom is active
+        const pos = getCursorPos(e, image);
+        updateCursorOutline(pos);
       }
 
-      function toggleFixedZoom(e) {
+      function toggleMagnifier(e) {
         e.stopPropagation(); // Prevent event from reaching document
         const pos = getCursorPos(e, image);
-        isFixed = true;
-        fixedPosition = pos;
-        updateLensAndOutline(pos);
+        isZoomed = true;
+        zoomPos = pos;
+        showMagnifier(pos);
       }
 
-      function resetZoom(e) {
-        if (e.target === pdfImage) return; // Ignore clicks on the image
-        isFixed = false;
+      function hideMagnifier(e) {
+        if (e.target === pdfImage || e.target === lens) return; // Ignore clicks on image or lens
+        isZoomed = false;
         lens.style.display = 'none';
         cursorOutline.style.display = 'none';
       }
 
-      function updateLensAndOutline(pos) {
-        // Update the cursor outline
+      function updateCursorOutline(pos) {
         const outlineWidth = lens.offsetWidth / zoom;
         const outlineHeight = lens.offsetHeight / zoom;
         const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
@@ -165,20 +161,19 @@
         cursorOutline.style.height = `${outlineHeight}px`;
         cursorOutline.style.left = `${outlineX}px`;
         cursorOutline.style.top = `${outlineY}px`;
-        cursorOutline.style.display = 'block'; // Ensure cursor outline is visible on hover
+        cursorOutline.style.display = 'block';
+      }
 
-        // Only show the magnifier lens after a click
-        if (!isFixed) {
-          lens.style.display = 'none';
-        }
+      function showMagnifier(pos) {
+        lens.style.backgroundImage = `url(${image.src})`;
+        lens.style.backgroundSize =
+          `${image.width * zoom}px ${image.height * zoom}px`;
+        
+        const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
+        const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
+        lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
 
-        // Update the lens
-        if (isFixed) {
-          const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
-          const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
-          lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
-          lens.style.display = 'block';
-        }
+        lens.style.display = 'block'; // Show the magnifier
       }
 
       function getCursorPos(e, image) {
