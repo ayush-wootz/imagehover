@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF Zoom with Hover to Activate and Reset</title>
+  <title>PDF Magnifier with Click-to-Zoom</title>
   <style>
     html, body {
       margin: 0;
@@ -12,163 +12,176 @@
       width: 100%;
     }
 
-    .zoom-container {
-      width: 100%;
-      height: 100vh;
-      overflow: hidden;
-      position: relative;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .image-wrapper {
+    .magnifier-container {
       position: relative;
       width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: auto;
+      max-width: none; /* so it fills the screen width */
     }
 
-    img {
-      transition: transform 0.3s ease;
-      cursor: zoom-in; /* Default cursor when hovering over image */
+    #pdfImage {
+      width: 100%;
+      display: block;
     }
 
-    img:active {
-      cursor: grabbing;
+    /* The lens is fixed in the top-right corner */
+    .magnifier-lens {
+      position: fixed;
+      top: 20px; /* Adjust as needed */
+      right: 20px; /* Adjust as needed */
+      width: 320px; /* Reduced size */
+      height: 180px; /* Reduced size */
+      border: 1px solid #333;
+      border-radius: 10%;
+      background: rgba(0, 0, 0, 0.1);
+      cursor: none;       /* hide default cursor */
+      pointer-events: none;  /* lens won't block mouse events */
+      display: none;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      z-index: 9999; /* Topmost */
+      background-repeat: no-repeat;
     }
 
-    .zoom-container:hover img {
-      cursor: zoom-in; /* Change cursor to zoom-in when hovering over image */
+    /* Translucent filled box around the cursor */
+    .cursor-outline {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.2); /* Translucent black fill */
+      border: 0px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
+      pointer-events: none;    /* Does not block interactions */
+      box-sizing: border-box;  /* Includes border in dimensions */
+      display: none;
+      z-index: 9998; /* Just below the lens */
     }
-
   </style>
 </head>
 <body>
 
-  <div class="zoom-container" id="zoomContainer">
-    <div class="image-wrapper" id="imageWrapper">
-      <!-- PDF rendered image will be inserted here -->
-      <img id="zoomImage" src="" alt="Zoomable Image" />
-    </div>
+  <div class="magnifier-container">
+    <img id="pdfImage" src="" alt="PDF Page" />
+
+    <!-- The translucent box around the cursor -->
+    <div class="cursor-outline" id="cursorOutline"></div>
+
+    <!-- The lens that shows the zoomed-in content -->
+    <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
   <!-- PDF.js (no integrity or crossorigin to avoid SRI mismatch) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js" referrerpolicy="no-referrer"></script>
-
-  <script>
-    const zoomImage = document.getElementById('zoomImage');
-    const zoomContainer = document.getElementById('zoomContainer');
-    const imageWrapper = document.getElementById('imageWrapper');
-
-    let scale = 1;
-    let isDragging = false;
-    let startX, startY;
-
-    // Load and render the PDF file (You can replace this with your PDF URL)
-    const pdfUrl = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';  // Replace with your PDF URL
-
-    const pdfjsLib = window['pdfjs-dist/build/pdf'];
-
-    // Load the PDF document using PDF.js
-    pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
-      // Get the first page of the PDF
-      pdf.getPage(1).then(page => {
-        const scaleFactor = 1.5;
-        const viewport = page.getViewport({ scale: scaleFactor });
-
-        // Prepare a canvas to render the page
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        // Render the PDF page into the canvas
-        page.render({
-          canvasContext: ctx,
-          viewport: viewport
-        }).promise.then(() => {
-          // Convert the canvas to a Data URL (base64) and set it as the image source
-          zoomImage.src = canvas.toDataURL();
-        });
-      });
-    });
-
-    // Zoom in and zoom out using mouse wheel (only when hovering over the image)
-    zoomContainer.addEventListener('wheel', (e) => {
-      if (e.target === zoomImage) {
-        e.preventDefault();
-        if (e.deltaY < 0) {
-          zoomIn();
-        } else {
-          zoomOut();
-        }
-      }
-    });
-
-    function zoomIn() {
-      if (scale < 3) {  // Max zoom level
-        scale += 0.1;
-        updateImageScale();
-      }
-    }
-
-    function zoomOut() {
-      if (scale > 1) {  // Min zoom level (original size)
-        scale -= 0.1;
-        updateImageScale();
-      }
-    }
-
-    function updateImageScale() {
-      zoomImage.style.transform = `scale(${scale})`;
-    }
-
-    // Allow the user to drag and scroll the image to a specific area (only when hovering over the image)
-    imageWrapper.addEventListener('mousedown', (e) => {
-      if (e.target === zoomImage) {
-        isDragging = true;
-        startX = e.clientX - imageWrapper.scrollLeft;
-        startY = e.clientY - imageWrapper.scrollTop;
-        zoomImage.style.cursor = 'grabbing';
-      }
-    });
-
-    imageWrapper.addEventListener('mousemove', (e) => {
-      if (isDragging) {
-        e.preventDefault();
-        imageWrapper.scrollLeft = e.clientX - startX;
-        imageWrapper.scrollTop = e.clientY - startY;
-      }
-    });
-
-    imageWrapper.addEventListener('mouseup', () => {
-      isDragging = false;
-      zoomImage.style.cursor = 'zoom-in';  // Reset cursor after dragging
-    });
-
-    imageWrapper.addEventListener('mouseleave', () => {
-      isDragging = false;
-      zoomImage.style.cursor = 'zoom-in';  // Reset cursor after dragging
-    });
-
-    // Reset zoom to original size if clicking outside the image
-    document.addEventListener('click', (e) => {
-      if (!zoomContainer.contains(e.target)) {
-        resetZoom();
-      }
-    });
-
-    function resetZoom() {
-      scale = 1;
-      updateImageScale();
-      imageWrapper.scrollLeft = 0;
-      imageWrapper.scrollTop = 0;
-    }
+  <script 
+    src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"
+    referrerpolicy="no-referrer">
   </script>
 
+  <script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+
+    // OPTIONAL: Set the PDF worker if your environment needs it
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = '...';
+
+    // 1) Get the PDF URL from ?pdf=
+    function getPDFUrlFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('pdf');
+    }
+    const pdfUrl = getPDFUrlFromQuery() ||
+      'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const pdfImage = document.getElementById('pdfImage');
+    const lens = document.getElementById('magnifierLens');
+    const cursorOutline = document.getElementById('cursorOutline');
+    let pdfDoc = null;
+
+    let isFixed = false; // Tracks whether the zoomed view is fixed
+    let fixedPosition = { x: 0, y: 0 }; // Stores fixed zoom position
+
+    // 2) Load the PDF, render the first page to a canvas
+    pdfjsLib.getDocument(pdfUrl).promise
+      .then(pdf => {
+        pdfDoc = pdf;
+        return pdf.getPage(1);
+      })
+      .then(page => {
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        return page.render({
+          canvasContext: ctx,
+          viewport
+        }).promise;
+      })
+      .then(() => {
+        // Convert canvas to data URL and display as an <img>
+        pdfImage.src = canvas.toDataURL('image/png');
+        setupMagnifier(pdfImage);
+      })
+      .catch(err => {
+        console.error('PDF render error:', err);
+        pdfImage.alt = 'Failed to load or render PDF.';
+      });
+
+    // 3) Setup the magnifier and cursor outline
+    function setupMagnifier(image) {
+      const zoom = 4; // Set zoom level
+
+      image.addEventListener('load', () => {
+        // Show cursor outline and magnifier on hover
+        image.addEventListener('mousemove', moveLens);
+        image.addEventListener('click', toggleFixedZoom);
+        document.addEventListener('click', resetZoom);
+
+        lens.style.backgroundImage = url(${image.src});
+        lens.style.backgroundSize =
+          ${image.width * zoom}px ${image.height * zoom}px;
+      });
+
+      function moveLens(e) {
+        if (isFixed) return; // Skip if zoom is fixed
+        updateLensAndOutline(getCursorPos(e, image));
+      }
+
+      function toggleFixedZoom(e) {
+        e.stopPropagation(); // Prevent event from reaching document
+        const pos = getCursorPos(e, image);
+        isFixed = true;
+        fixedPosition = pos;
+        updateLensAndOutline(pos);
+      }
+
+      function resetZoom(e) {
+        if (e.target === pdfImage) return; // Ignore clicks on the image
+        isFixed = false;
+        lens.style.display = 'none';
+        cursorOutline.style.display = 'none';
+      }
+
+      function updateLensAndOutline(pos) {
+        // Update the cursor outline
+        const outlineWidth = lens.offsetWidth / zoom;
+        const outlineHeight = lens.offsetHeight / zoom;
+        const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
+        const outlineY = Math.max(0, Math.min(pos.y - outlineHeight / 2, image.height - outlineHeight));
+        cursorOutline.style.width = ${outlineWidth}px;
+        cursorOutline.style.height = ${outlineHeight}px;
+        cursorOutline.style.left = ${outlineX}px;
+        cursorOutline.style.top = ${outlineY}px;
+        cursorOutline.style.display = 'block';
+
+        // Update the lens
+        const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
+        const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
+        lens.style.backgroundPosition = ${bgX}px ${bgY}px;
+        lens.style.display = 'block';
+      }
+
+      function getCursorPos(e, image) {
+        const rect = image.getBoundingClientRect();
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+      }
+    }
+  </script>
 </body>
 </html>
