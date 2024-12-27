@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF Magnifier with Translucent Cursor Box</title>
+  <title>PDF Magnifier with Click-to-Zoom</title>
   <style>
     html, body {
       margin: 0;
@@ -28,8 +28,8 @@
       position: fixed;
       top: 20px; /* Adjust as needed */
       right: 20px; /* Adjust as needed */
-      width: 180px; /* Reduced to 75% */
-      height: 180px; /* Reduced to 75% */
+      width: 180px; /* Reduced size */
+      height: 180px; /* Reduced size */
       border: 1px solid #333;
       border-radius: 10%;
       background: rgba(0, 0, 0, 0.1);
@@ -92,6 +92,9 @@
     const cursorOutline = document.getElementById('cursorOutline');
     let pdfDoc = null;
 
+    let isFixed = false; // Tracks whether the zoomed view is fixed
+    let fixedPosition = { x: 0, y: 0 }; // Stores fixed zoom position
+
     // 2) Load the PDF, render the first page to a canvas
     pdfjsLib.getDocument(pdfUrl).promise
       .then(pdf => {
@@ -119,69 +122,64 @@
 
     // 3) Setup the magnifier and cursor outline
     function setupMagnifier(image) {
-      // Zoom factor
-      const zoom = 3; // Reduced from 4x to 3x
+      const zoom = 3; // Set zoom level
 
       image.addEventListener('load', () => {
-        // Show/hide elements
+        // Show cursor outline and magnifier on hover
         image.addEventListener('mousemove', moveLens);
-        image.addEventListener('mouseenter', () => {
-          lens.style.display = 'block';
-          cursorOutline.style.display = 'block';
-        });
-        image.addEventListener('mouseleave', () => {
-          lens.style.display = 'none';
-          cursorOutline.style.display = 'none';
-        });
+        image.addEventListener('click', toggleFixedZoom);
+        document.addEventListener('click', resetZoom);
 
-        // Set lens background to the rendered PDF image
         lens.style.backgroundImage = `url(${image.src})`;
         lens.style.backgroundSize =
           `${image.width * zoom}px ${image.height * zoom}px`;
       });
 
       function moveLens(e) {
-        e.preventDefault();
+        if (isFixed) return; // Skip if zoom is fixed
+        updateLensAndOutline(getCursorPos(e, image));
+      }
 
-        // Get cursor position relative to the image
+      function toggleFixedZoom(e) {
+        e.stopPropagation(); // Prevent event from reaching document
         const pos = getCursorPos(e, image);
+        isFixed = true;
+        fixedPosition = pos;
+        updateLensAndOutline(pos);
+      }
 
-        // 1. Update the cursor outline (scaled down by zoom factor)
+      function resetZoom(e) {
+        if (e.target === pdfImage) return; // Ignore clicks on the image
+        isFixed = false;
+        lens.style.display = 'none';
+        cursorOutline.style.display = 'none';
+      }
+
+      function updateLensAndOutline(pos) {
+        // Update the cursor outline
         const outlineWidth = lens.offsetWidth / zoom;
         const outlineHeight = lens.offsetHeight / zoom;
-
-        let outlineX = pos.x - outlineWidth / 2;
-        let outlineY = pos.y - outlineHeight / 2;
-
-        // Clamp the outline to stay within the image bounds
-        if (outlineX < 0) outlineX = 0;
-        if (outlineY < 0) outlineY = 0;
-        if (outlineX > image.width - outlineWidth) {
-          outlineX = image.width - outlineWidth;
-        }
-        if (outlineY > image.height - outlineHeight) {
-          outlineY = image.height - outlineHeight;
-        }
-
+        const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
+        const outlineY = Math.max(0, Math.min(pos.y - outlineHeight / 2, image.height - outlineHeight));
         cursorOutline.style.width = `${outlineWidth}px`;
         cursorOutline.style.height = `${outlineHeight}px`;
         cursorOutline.style.left = `${outlineX}px`;
         cursorOutline.style.top = `${outlineY}px`;
+        cursorOutline.style.display = 'block';
 
-        // 2. Update the lens background (fixed position, but zooming dynamically)
+        // Update the lens
         const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
         const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
-
         lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
+        lens.style.display = 'block';
       }
 
       function getCursorPos(e, image) {
         const rect = image.getBoundingClientRect();
-        let x = e.pageX - rect.left;
-        let y = e.pageY - rect.top;
-        x -= window.pageXOffset;
-        y -= window.pageYOffset;
-        return { x, y };
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
       }
     }
   </script>
