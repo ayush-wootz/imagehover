@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Image Zoom with Scroll and Reset</title>
+  <title>Image Zoom with Hover to Activate and Reset</title>
   <style>
     html, body {
       margin: 0;
@@ -34,12 +34,17 @@
 
     img {
       transition: transform 0.3s ease;
-      cursor: grab;
+      cursor: zoom-in; /* Default cursor when hovering over image */
     }
 
     img:active {
       cursor: grabbing;
     }
+
+    .zoom-container:hover img {
+      cursor: zoom-in; /* Change cursor to zoom-in when hovering over image */
+    }
+
   </style>
 </head>
 <body>
@@ -59,13 +64,15 @@
     let isDragging = false;
     let startX, startY;
 
-    // Zoom in and zoom out using mouse wheel
+    // Zoom in and zoom out using mouse wheel (only when hovering over the image)
     zoomContainer.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      if (e.deltaY < 0) {
-        zoomIn();
-      } else {
-        zoomOut();
+      if (e.target === zoomImage) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          zoomIn();
+        } else {
+          zoomOut();
+        }
       }
     });
 
@@ -87,12 +94,14 @@
       zoomImage.style.transform = `scale(${scale})`;
     }
 
-    // Allow the user to drag and scroll the image to a specific area
+    // Allow the user to drag and scroll the image to a specific area (only when hovering over the image)
     imageWrapper.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      startX = e.clientX - imageWrapper.scrollLeft;
-      startY = e.clientY - imageWrapper.scrollTop;
-      zoomImage.style.cursor = 'grabbing';
+      if (e.target === zoomImage) {
+        isDragging = true;
+        startX = e.clientX - imageWrapper.scrollLeft;
+        startY = e.clientY - imageWrapper.scrollTop;
+        zoomImage.style.cursor = 'grabbing';
+      }
     });
 
     imageWrapper.addEventListener('mousemove', (e) => {
@@ -105,12 +114,12 @@
 
     imageWrapper.addEventListener('mouseup', () => {
       isDragging = false;
-      zoomImage.style.cursor = 'grab';
+      zoomImage.style.cursor = 'zoom-in';  // Reset cursor after dragging
     });
 
     imageWrapper.addEventListener('mouseleave', () => {
       isDragging = false;
-      zoomImage.style.cursor = 'grab';
+      zoomImage.style.cursor = 'zoom-in';  // Reset cursor after dragging
     });
 
     // Reset zoom to original size if clicking outside the image
