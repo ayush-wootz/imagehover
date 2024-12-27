@@ -28,7 +28,7 @@
       position: fixed;
       top: 20px; /* Adjust as needed */
       right: 20px; /* Adjust as needed */
-      width: 180px; /* Reduced size */
+      width: 240px; /* Reduced size */
       height: 180px; /* Reduced size */
       border: 1px solid #333;
       border-radius: 10%;
@@ -45,7 +45,7 @@
     .cursor-outline {
       position: absolute;
       background: rgba(0, 0, 0, 0.2); /* Translucent black fill */
-      border: 1px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
+      border: 0px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
       pointer-events: none;    /* Does not block interactions */
       box-sizing: border-box;  /* Includes border in dimensions */
       display: none;
@@ -122,7 +122,7 @@
 
     // 3) Setup the magnifier and cursor outline
     function setupMagnifier(image) {
-      const zoom = 3; // Set zoom level
+      const zoom = 4; // Set zoom level
 
       image.addEventListener('load', () => {
         // Show cursor outline and magnifier on hover
