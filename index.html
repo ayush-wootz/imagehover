@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Text Selection and Copy</title>
+    <title>PDF Free-form Selection and Copy Text</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
         #pdf-container {
             position: relative;
             width: 100%;
             height: 100vh;
             overflow: auto;
-        }
-
-        .textLayer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            pointer-events: none;
         }
 
         .selection-box {
@@ -25,6 +24,7 @@
             background-color: rgba(255, 0, 0, 0.2);
             pointer-events: none;
             z-index: 9999;
+            display: none;
         }
 
         #pdfCanvas {
@@ -47,6 +47,7 @@
         #copyButton:hover {
             background: #218838;
         }
+
     </style>
 </head>
 <body>
@@ -67,8 +68,8 @@
         const copyButton = document.getElementById('copyButton');
         let pdfDoc = null;
         let currentPage = 1;
+        let selectionPolygon = []; // Array to store points for free-form selection
         let selectionBox = null;
-        let selectedArea = null;
 
         // Load the PDF
         pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
@@ -109,13 +110,18 @@
             });
         }
 
-        // Add free-form selection
+        // Handle mouse down event to start free-form selection
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const startX = e.clientX - rect.left;
             const startY = e.clientY - rect.top;
 
-            // Create a selection box
+            selectionPolygon = [{ x: startX, y: startY }];
+            if (selectionBox) {
+                selectionBox.style.display = 'none';
+            }
+
+            // Create a new selection box for visual feedback
             selectionBox = document.createElement('div');
             selectionBox.classList.add('selection-box');
             selectionBox.style.left = `${startX}px`;
@@ -127,66 +133,76 @@
                 const width = moveEvent.clientX - rect.left - startX;
                 const height = moveEvent.clientY - rect.top - startY;
 
+                selectionPolygon.push({ x: moveEvent.clientX - rect.left, y: moveEvent.clientY - rect.top });
+
                 selectionBox.style.width = `${Math.abs(width)}px`;
                 selectionBox.style.height = `${Math.abs(height)}px`;
                 if (width < 0) selectionBox.style.left = `${moveEvent.clientX - rect.left}px`;
                 if (height < 0) selectionBox.style.top = `${moveEvent.clientY - rect.top}px`;
-
-                selectedArea = {
-                    left: Math.min(startX, moveEvent.clientX - rect.left),
-                    top: Math.min(startY, moveEvent.clientY - rect.top),
-                    right: Math.max(startX, moveEvent.clientX - rect.left),
-                    bottom: Math.max(startY, moveEvent.clientY - rect.top)
-                };
             };
 
-            // Stop tracking mouse movement when mouse is released
+            // Stop tracking mouse movement on mouse up
             const mouseUpHandler = () => {
                 canvas.removeEventListener('mousemove', mouseMoveHandler);
                 document.removeEventListener('mouseup', mouseUpHandler);
+                selectionBox.style.display = 'none'; // Hide the selection box after release
+                getTextInsidePolygon();
             };
 
             canvas.addEventListener('mousemove', mouseMoveHandler);
             document.addEventListener('mouseup', mouseUpHandler);
         });
 
-        // Copy selected text to clipboard
-        copyButton.addEventListener('click', () => {
-            if (selectedArea) {
-                const page = pdfDoc.getPage(currentPage);
-                page.then((page) => {
-                    const viewport = page.getViewport({ scale: 1.5 });
-                    page.getTextContent().then((textContent) => {
-                        const textItems = textContent.items;
-                        let selectedText = '';
+        // Get text inside the selected polygon
+        function getTextInsidePolygon() {
+            if (selectionPolygon.length < 3) return;
 
-                        // Loop through all the text items and extract text in the selection area
-                        textItems.forEach(item => {
-                            const x = item.transform[4];
-                            const y = item.transform[5];
-                            const width = item.width;
-                            const height = item.height;
+            const selectedArea = new Path2D();
+            selectionPolygon.forEach(point => selectedArea.lineTo(point.x, point.y));
+            selectedArea.closePath();
 
-                            // Check if the text item's coordinates are within the selected area
-                            if (x + width > selectedArea.left && x < selectedArea.right &&
-                                y + height > selectedArea.top && y < selectedArea.bottom) {
-                                selectedText += item.str + ' ';
-                            }
-                        });
+            const page = pdfDoc.getPage(currentPage);
+            page.then((page) => {
+                const viewport = page.getViewport({ scale: 1.5 });
+                page.getTextContent().then((textContent) => {
+                    const textItems = textContent.items;
+                    let selectedText = '';
 
-                        // Copy the text to clipboard
-                        if (selectedText) {
-                            navigator.clipboard.writeText(selectedText.trim()).then(() => {
-                                alert('Text copied to clipboard!');
-                            }).catch((err) => {
-                                console.error('Error copying text: ', err);
-                            });
+                    textItems.forEach(item => {
+                        const x = item.transform[4];
+                        const y = item.transform[5];
+                        const width = item.width;
+                        const height = item.height;
+
+                        // Check if the text item's coordinates are inside the polygon
+                        if (isPointInsidePolygon(x, y, selectedArea)) {
+                            selectedText += item.str + ' ';
                         }
                     });
+
+                    if (selectedText) {
+                        navigator.clipboard.writeText(selectedText.trim()).then(() => {
+                            alert('Text copied to clipboard!');
+                        }).catch((err) => {
+                            console.error('Error copying text: ', err);
+                        });
+                    }
                 });
-            } else {
-                alert('No selection made!');
-            }
+            });
+        }
+
+        // Function to check if a point is inside a polygon
+        function isPointInsidePolygon(x, y, polygon) {
+            const ctx = document.createElement('canvas').getContext('2d');
+            ctx.beginPath();
+            polygon.forEach(point => ctx.lineTo(point.x, point.y));
+            ctx.closePath();
+            return ctx.isPointInPath(x, y);
+        }
+
+        // Button click event to copy selected text
+        copyButton.addEventListener('click', () => {
+            getTextInsidePolygon();
         });
     </script>
 </body>
