@@ -32,7 +32,7 @@
       height: 180px; /* Reduced size */
       border: 1px solid #333;
       border-radius: 10%;
-      background: rgba(0, 0, 0, 0.1);
+      background: rgba(0, 0, 0, 0.5); /* 50% transparency during hover */
       cursor: none;       /* hide default cursor */
       pointer-events: none;  /* lens won't block mouse events */
       display: none;
@@ -138,6 +138,7 @@
       function moveLens(e) {
         if (isFixed) return; // Skip if zoom is fixed
         updateLensAndOutline(getCursorPos(e, image));
+        lens.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // 50% transparency on hover
       }
 
       function toggleFixedZoom(e) {
@@ -146,6 +147,7 @@
         isFixed = true;
         fixedPosition = pos;
         updateLensAndOutline(pos);
+        lens.style.backgroundColor = 'rgba(0, 0, 0, 0)'; // No transparency on click
       }
 
       function resetZoom(e) {
@@ -153,6 +155,7 @@
         isFixed = false;
         lens.style.display = 'none';
         cursorOutline.style.display = 'none';
+        lens.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // Reset to 50% transparency
       }
 
       function updateLensAndOutline(pos) {
