@@ -26,8 +26,8 @@
     /* The lens is fixed in the top-right corner */
     .magnifier-lens {
       position: fixed;
-      top: 10px; /* Adjust as needed */
-      right: 10px; /* Adjust as needed */
+      top: 20px; /* Adjust as needed */
+      right: 20px; /* Adjust as needed */
       width: 320px; /* Reduced size */
       height: 180px; /* Reduced size */
       border: 1px solid #333;
@@ -44,7 +44,7 @@
     /* Translucent filled box around the cursor */
     .cursor-outline {
       position: absolute;
-      background: rgba(0, 0, 255, 0.2); /* Translucent black fill */
+      background: rgba(0, 0, 0, 0.2); /* Translucent black fill */
       border: 0px solid rgba(0, 0, 0, 0.4); /* Slightly darker border */
       pointer-events: none;    /* Does not block interactions */
       box-sizing: border-box;  /* Includes border in dimensions */
@@ -130,9 +130,9 @@
         image.addEventListener('click', toggleFixedZoom);
         document.addEventListener('click', resetZoom);
 
-        lens.style.backgroundImage = url(${image.src});
+        lens.style.backgroundImage = `url(${image.src})`;
         lens.style.backgroundSize =
-          ${image.width * zoom}px ${image.height * zoom}px;
+          `${image.width * zoom}px ${image.height * zoom}px`;
       });
 
       function moveLens(e) {
@@ -161,16 +161,16 @@
         const outlineHeight = lens.offsetHeight / zoom;
         const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
         const outlineY = Math.max(0, Math.min(pos.y - outlineHeight / 2, image.height - outlineHeight));
-        cursorOutline.style.width = ${outlineWidth}px;
-        cursorOutline.style.height = ${outlineHeight}px;
-        cursorOutline.style.left = ${outlineX}px;
-        cursorOutline.style.top = ${outlineY}px;
+        cursorOutline.style.width = `${outlineWidth}px`;
+        cursorOutline.style.height = `${outlineHeight}px`;
+        cursorOutline.style.left = `${outlineX}px`;
+        cursorOutline.style.top = `${outlineY}px`;
         cursorOutline.style.display = 'block';
 
         // Update the lens
         const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
         const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
-        lens.style.backgroundPosition = ${bgX}px ${bgY}px;
+        lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
         lens.style.display = 'block';
       }
 
