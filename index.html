@@ -96,6 +96,7 @@
       })
       .then(() => {
         pdfImage.src = canvas.toDataURL('image/png');
+        pdfImage.style.display = 'block';
         setupMagnifier(pdfImage);
       })
       .catch(err => {
