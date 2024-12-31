@@ -30,7 +30,7 @@
       bottom: 10px;
       left: 10px;
       width: 240px;
-      height: 160px;
+      height: 240px;
       border: 1px solid #333;
       border-radius: 10%;
       background: rgba(0, 0, 0, 0.1);
@@ -45,10 +45,12 @@
     .cursor-outline {
       position: absolute;
       background: rgba(217, 158, 2, 0.2);
-      border: 0px solid rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(217, 158, 2, 0.4);
       pointer-events: none;
       box-sizing: border-box;
-      display: none;
+      width: 48px;  /* 240px / 5 (zoom level) */
+      height: 48px; /* 240px / 5 (zoom level) */
+      display: block; /* Always visible */
       z-index: 9998;
     }
   </style>
@@ -67,6 +69,9 @@
 
   <script>
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    const ZOOM_LEVEL = 5;
+    const LENS_SIZE = 240; // Size of the magnified window
+    const OUTLINE_SIZE = LENS_SIZE / ZOOM_LEVEL; // Size of the translucent area
 
     function getPDFUrlFromQuery() {
       const params = new URLSearchParams(window.location.search);
@@ -108,26 +113,12 @@
       });
 
     function setupMagnifier(image) {
-      const zoom = 5;
-
       image.addEventListener('load', () => {
-        image.addEventListener('mousemove', showCursorOutline);
-        image.addEventListener('mouseleave', hideCursorOutline);
+        image.addEventListener('mousemove', updateCursorOutline);
         image.addEventListener('click', handleClick);
         lens.style.backgroundImage = `url(${image.src})`;
-        lens.style.backgroundSize = `${image.width * zoom}px ${image.height * zoom}px`;
+        lens.style.backgroundSize = `${image.width * ZOOM_LEVEL}px ${image.height * ZOOM_LEVEL}px`;
       });
-
-      function showCursorOutline(e) {
-        const pos = getCursorPos(e, image);
-        updateCursorOutline(pos);
-      }
-
-      function hideCursorOutline() {
-        if (!isZoomActive) {
-          cursorOutline.style.display = 'none';
-        }
-      }
 
       function handleClick(e) {
         const pos = getCursorPos(e, image);
@@ -143,28 +134,26 @@
           isZoomActive = false;
           currentZoomPosition = null;
           lens.style.display = 'none';
-          updateCursorOutline(pos);
+          updateCursorOutline(e);
         }
       }
 
-      function updateCursorOutline(pos) {
-        const outlineWidth = lens.offsetWidth / zoom;
-        const outlineHeight = lens.offsetHeight / zoom;
-        const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
-        const outlineY = Math.max(0, Math.min(pos.y - outlineHeight / 2, image.height - outlineHeight));
+      function updateCursorOutline(e) {
+        const pos = getCursorPos(e, image);
+        const outlineX = Math.max(0, Math.min(pos.x - OUTLINE_SIZE / 2, image.width - OUTLINE_SIZE));
+        const outlineY = Math.max(0, Math.min(pos.y - OUTLINE_SIZE / 2, image.height - OUTLINE_SIZE));
         
-        cursorOutline.style.width = `${outlineWidth}px`;
-        cursorOutline.style.height = `${outlineHeight}px`;
         cursorOutline.style.left = `${outlineX}px`;
         cursorOutline.style.top = `${outlineY}px`;
-        cursorOutline.style.display = 'block';
       }
 
       function updateLensAndOutline(pos) {
-        updateCursorOutline(pos);
+        updateCursorOutline({ clientX: pos.x + image.getBoundingClientRect().left, 
+                             clientY: pos.y + image.getBoundingClientRect().top });
         
-        const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
-        const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
+        // Calculate the background position to exactly match the area under the outline
+        const bgX = -(pos.x * ZOOM_LEVEL - LENS_SIZE / 2 + OUTLINE_SIZE * ZOOM_LEVEL / 2);
+        const bgY = -(pos.y * ZOOM_LEVEL - LENS_SIZE / 2 + OUTLINE_SIZE * ZOOM_LEVEL / 2);
         lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
       }
 
