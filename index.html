@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Click-to-Zoom</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PDF Magnifier with Click-to-Show/Hide</title>
   <style>
     html, body {
       margin: 0;
@@ -16,7 +16,6 @@
     .magnifier-container {
       position: relative;
       width: 100%;
-      height: 100%;
       max-width: none;
     }
 
@@ -26,18 +25,7 @@
       background-color: #0A0A0A;
     }
 
-    .translucent-area {
-      position: absolute;
-      width: 240px;
-      height: 160px;
-      background: rgba(217, 158, 2, 0.2);
-      border: 1px dashed #D99E02;
-      pointer-events: none;
-      display: none;
-      z-index: 9998;
-    }
-
-    .magnifier-window {
+    .magnifier-lens {
       position: fixed;
       bottom: 10px;
       left: 10px;
@@ -46,19 +34,30 @@
       border: 1px solid #333;
       border-radius: 10%;
       background: rgba(0, 0, 0, 0.1);
+      cursor: none;
+      pointer-events: none;
       display: none;
-      background-repeat: no-repeat;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
       z-index: 9999;
+      background-repeat: no-repeat;
+    }
+
+    .cursor-outline {
+      position: absolute;
+      background: rgba(217, 158, 2, 0.2);
+      border: 0px solid rgba(0, 0, 0, 0.4);
+      pointer-events: none;
+      box-sizing: border-box;
+      display: none;
+      z-index: 9998;
     }
   </style>
 </head>
 <body>
-
   <div class="magnifier-container">
     <img id="pdfImage" src="" alt="PDF Page" />
-    <div class="translucent-area" id="translucentArea"></div>
-    <div class="magnifier-window" id="magnifierWindow"></div>
+    <div class="cursor-outline" id="cursorOutline"></div>
+    <div class="magnifier-lens" id="magnifierLens"></div>
   </div>
 
   <script 
@@ -69,16 +68,21 @@
   <script>
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
 
-    // Load the PDF
-    const pdfUrl = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+    function getPDFUrlFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('pdf');
+    }
+    const pdfUrl = getPDFUrlFromQuery() ||
+      'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const pdfImage = document.getElementById('pdfImage');
-    const translucentArea = document.getElementById('translucentArea');
-    const magnifierWindow = document.getElementById('magnifierWindow');
+    const lens = document.getElementById('magnifierLens');
+    const cursorOutline = document.getElementById('cursorOutline');
     let pdfDoc = null;
-
-    let isMagnified = false; // Track magnification state
+    let isZoomActive = false;
+    let currentZoomPosition = null;
 
     pdfjsLib.getDocument(pdfUrl).promise
       .then(pdf => {
@@ -96,7 +100,6 @@
       })
       .then(() => {
         pdfImage.src = canvas.toDataURL('image/png');
-        pdfImage.style.display = 'block';
         setupMagnifier(pdfImage);
       })
       .catch(err => {
@@ -105,46 +108,64 @@
       });
 
     function setupMagnifier(image) {
-      const zoom = 5; // Same zoom level
+      const zoom = 5;
 
-      image.addEventListener('mousemove', (e) => {
-        if (isMagnified) return; // Skip when magnified
-
-        const pos = getCursorPos(e, image);
-        updateTranslucentArea(pos, image);
+      image.addEventListener('load', () => {
+        image.addEventListener('mousemove', showCursorOutline);
+        image.addEventListener('mouseleave', hideCursorOutline);
+        image.addEventListener('click', handleClick);
+        lens.style.backgroundImage = `url(${image.src})`;
+        lens.style.backgroundSize = `${image.width * zoom}px ${image.height * zoom}px`;
       });
 
-      image.addEventListener('click', (e) => {
+      function showCursorOutline(e) {
         const pos = getCursorPos(e, image);
-        if (isMagnified) {
-          resetMagnifier();
-        } else {
-          showMagnifier(pos, image);
+        updateCursorOutline(pos);
+      }
+
+      function hideCursorOutline() {
+        if (!isZoomActive) {
+          cursorOutline.style.display = 'none';
         }
-      });
-
-      function updateTranslucentArea(pos, image) {
-        const outlineX = Math.max(0, Math.min(pos.x - translucentArea.offsetWidth / 2, image.width - translucentArea.offsetWidth));
-        const outlineY = Math.max(0, Math.min(pos.y - translucentArea.offsetHeight / 2, image.height - translucentArea.offsetHeight));
-        translucentArea.style.left = `${outlineX}px`;
-        translucentArea.style.top = `${outlineY}px`;
-        translucentArea.style.display = 'block';
       }
 
-      function showMagnifier(pos, image) {
-        const bgX = -(pos.x * zoom) + magnifierWindow.offsetWidth / 2;
-        const bgY = -(pos.y * zoom) + magnifierWindow.offsetHeight / 2;
-        magnifierWindow.style.backgroundImage = `url(${image.src})`;
-        magnifierWindow.style.backgroundSize = `${image.width * zoom}px ${image.height * zoom}px`;
-        magnifierWindow.style.backgroundPosition = `${bgX}px ${bgY}px`;
-        magnifierWindow.style.display = 'block';
-        isMagnified = true;
+      function handleClick(e) {
+        const pos = getCursorPos(e, image);
+        
+        if (!isZoomActive) {
+          // Activate zoom for clicked position
+          isZoomActive = true;
+          currentZoomPosition = pos;
+          updateLensAndOutline(pos);
+          lens.style.display = 'block';
+        } else {
+          // Deactivate zoom
+          isZoomActive = false;
+          currentZoomPosition = null;
+          lens.style.display = 'none';
+          updateCursorOutline(pos);
+        }
       }
 
-      function resetMagnifier() {
-        magnifierWindow.style.display = 'none';
-        translucentArea.style.display = 'none';
-        isMagnified = false;
+      function updateCursorOutline(pos) {
+        const outlineWidth = lens.offsetWidth / zoom;
+        const outlineHeight = lens.offsetHeight / zoom;
+        const outlineX = Math.max(0, Math.min(pos.x - outlineWidth / 2, image.width - outlineWidth));
+        const outlineY = Math.max(0, Math.min(pos.y - outlineHeight / 2, image.height - outlineHeight));
+        
+        cursorOutline.style.width = `${outlineWidth}px`;
+        cursorOutline.style.height = `${outlineHeight}px`;
+        cursorOutline.style.left = `${outlineX}px`;
+        cursorOutline.style.top = `${outlineY}px`;
+        cursorOutline.style.display = 'block';
+      }
+
+      function updateLensAndOutline(pos) {
+        updateCursorOutline(pos);
+        
+        const bgX = -(pos.x * zoom) + lens.offsetWidth / 2;
+        const bgY = -(pos.y * zoom) + lens.offsetHeight / 2;
+        lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
       }
 
       function getCursorPos(e, image) {
