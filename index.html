@@ -40,6 +40,7 @@
       box-shadow: 0 0 10px rgba(0,0,0,0.3);
       z-index: 9999;
       background-repeat: no-repeat;
+      overflow: hidden;
     }
 
     .cursor-outline {
@@ -50,7 +51,7 @@
       box-sizing: border-box;
       width: 48px;  /* 240px / 5 (zoom level) */
       height: 48px; /* 240px / 5 (zoom level) */
-      display: block; /* Always visible */
+      display: block;
       z-index: 9998;
     }
   </style>
@@ -70,8 +71,8 @@
   <script>
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
     const ZOOM_LEVEL = 5;
-    const LENS_SIZE = 240; // Size of the magnified window
-    const OUTLINE_SIZE = LENS_SIZE / ZOOM_LEVEL; // Size of the translucent area
+    const LENS_SIZE = 240;
+    const OUTLINE_SIZE = LENS_SIZE / ZOOM_LEVEL;
 
     function getPDFUrlFromQuery() {
       const params = new URLSearchParams(window.location.search);
@@ -124,13 +125,11 @@
         const pos = getCursorPos(e, image);
         
         if (!isZoomActive) {
-          // Activate zoom for clicked position
           isZoomActive = true;
           currentZoomPosition = pos;
           updateLensAndOutline(pos);
           lens.style.display = 'block';
         } else {
-          // Deactivate zoom
           isZoomActive = false;
           currentZoomPosition = null;
           lens.style.display = 'none';
@@ -148,12 +147,16 @@
       }
 
       function updateLensAndOutline(pos) {
-        updateCursorOutline({ clientX: pos.x + image.getBoundingClientRect().left, 
-                             clientY: pos.y + image.getBoundingClientRect().top });
+        // Update the cursor outline position
+        const outlineX = Math.max(0, Math.min(pos.x - OUTLINE_SIZE / 2, image.width - OUTLINE_SIZE));
+        const outlineY = Math.max(0, Math.min(pos.y - OUTLINE_SIZE / 2, image.height - OUTLINE_SIZE));
         
-        // Calculate the background position to exactly match the area under the outline
-        const bgX = -(pos.x * ZOOM_LEVEL - LENS_SIZE / 2 + OUTLINE_SIZE * ZOOM_LEVEL / 2);
-        const bgY = -(pos.y * ZOOM_LEVEL - LENS_SIZE / 2 + OUTLINE_SIZE * ZOOM_LEVEL / 2);
+        cursorOutline.style.left = `${outlineX}px`;
+        cursorOutline.style.top = `${outlineY}px`;
+        
+        // Calculate the background position to exactly match the outline area
+        const bgX = -(outlineX * ZOOM_LEVEL);
+        const bgY = -(outlineY * ZOOM_LEVEL);
         lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
       }
 
