@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PDF Magnifier with Click-to-Show/Hide</title>
+  <title>PDF Magnifier with Dynamic Hover</title>
   <style>
     html, body {
       margin: 0;
@@ -87,8 +87,8 @@
     const lens = document.getElementById('magnifierLens');
     const cursorOutline = document.getElementById('cursorOutline');
     let pdfDoc = null;
-    let isZoomActive = false;
-    let currentZoomPosition = null;
+    let isFreezed = false;
+    let freezePosition = null;
 
     pdfjsLib.getDocument(pdfUrl).promise
       .then(pdf => {
@@ -115,30 +115,52 @@
 
     function setupMagnifier(image) {
       image.addEventListener('load', () => {
-        image.addEventListener('mousemove', updateCursorOutline);
+        image.addEventListener('mousemove', handleMouseMove);
+        image.addEventListener('mouseenter', handleMouseEnter);
+        image.addEventListener('mouseleave', handleMouseLeave);
         image.addEventListener('click', handleClick);
         lens.style.backgroundImage = `url(${image.src})`;
         lens.style.backgroundSize = `${image.width * ZOOM_LEVEL}px ${image.height * ZOOM_LEVEL}px`;
       });
 
-      function handleClick(e) {
-        const pos = getCursorPos(e, image);
-        
-        if (!isZoomActive) {
-          isZoomActive = true;
-          currentZoomPosition = pos;
-          updateLensAndOutline(pos);
+      function handleMouseEnter(e) {
+        if (!isFreezed) {
           lens.style.display = 'block';
-        } else {
-          isZoomActive = false;
-          currentZoomPosition = null;
-          lens.style.display = 'none';
-          updateCursorOutline(e);
         }
       }
 
-      function updateCursorOutline(e) {
+      function handleMouseLeave(e) {
+        if (!isFreezed) {
+          lens.style.display = 'none';
+        }
+      }
+
+      function handleMouseMove(e) {
         const pos = getCursorPos(e, image);
+        updateCursorOutline(pos);
+        
+        if (!isFreezed) {
+          updateLensAndOutline(pos);
+        }
+      }
+
+      function handleClick(e) {
+        const pos = getCursorPos(e, image);
+        
+        if (!isFreezed) {
+          // Freeze the magnifier at current position
+          isFreezed = true;
+          freezePosition = pos;
+          updateLensAndOutline(pos);
+        } else {
+          // Unfreeze and return to dynamic mode
+          isFreezed = false;
+          freezePosition = null;
+          updateLensAndOutline(pos);
+        }
+      }
+
+      function updateCursorOutline(pos) {
         const outlineX = Math.max(0, Math.min(pos.x - OUTLINE_SIZE / 2, image.width - OUTLINE_SIZE));
         const outlineY = Math.max(0, Math.min(pos.y - OUTLINE_SIZE / 2, image.height - OUTLINE_SIZE));
         
