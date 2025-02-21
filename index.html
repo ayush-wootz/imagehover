@@ -11,6 +11,7 @@
       height: 100%;
       width: 100%;
       background-color: #0A0A0A;
+      user-select: none; /* Prevent text selection */
     }
 
     .magnifier-container {
@@ -23,6 +24,7 @@
       width: 100%;
       display: block;
       background-color: #0A0A0A;
+      pointer-events: none; /* Prevents interactions */
     }
 
     .magnifier-lens {
@@ -49,14 +51,15 @@
       border: 1px solid rgba(217, 158, 2, 0.4);
       pointer-events: none;
       box-sizing: border-box;
-      width: 48px;  /* 240px / 5 (zoom level) */
-      height: 48px; /* 240px / 5 (zoom level) */
+      width: 48px;
+      height: 48px;
       display: block;
       z-index: 9998;
     }
   </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
+
   <div class="magnifier-container">
     <img id="pdfImage" src="" alt="PDF Page" />
     <div class="cursor-outline" id="cursorOutline"></div>
@@ -69,6 +72,38 @@
   </script>
 
   <script>
+    // Disable right-click
+    document.addEventListener("contextmenu", function(event) {
+        event.preventDefault();
+        alert("Right-click is disabled.");
+    });
+
+    // Disable keyboard shortcuts
+    document.addEventListener("keydown", function(event) {
+        if (event.keyCode == 123) { // F12
+            event.preventDefault();
+        }
+        if (event.ctrlKey && event.shiftKey && event.keyCode == 73) { // Ctrl+Shift+I
+            event.preventDefault();
+        }
+        if (event.ctrlKey && event.keyCode == 85) { // Ctrl+U
+            event.preventDefault();
+        }
+        if (event.ctrlKey && event.keyCode == 83) { // Ctrl+S
+            event.preventDefault();
+        }
+    });
+
+    // Block drag and drop events
+    document.addEventListener("dragstart", function(event) {
+        event.preventDefault();
+    });
+
+    // Block text/image selection
+    document.addEventListener("selectstart", function(event) {
+        event.preventDefault();
+    });
+
     const pdfjsLib = window['pdfjs-dist/build/pdf'];
     const ZOOM_LEVEL = 5;
     const LENS_SIZE = 240;
@@ -106,90 +141,12 @@
       })
       .then(() => {
         pdfImage.src = canvas.toDataURL('image/png');
-        setupMagnifier(pdfImage);
       })
       .catch(err => {
         console.error('PDF render error:', err);
         pdfImage.alt = 'Failed to load or render PDF.';
       });
-
-    function setupMagnifier(image) {
-      image.addEventListener('load', () => {
-        image.addEventListener('mousemove', handleMouseMove);
-        image.addEventListener('mouseenter', handleMouseEnter);
-        image.addEventListener('mouseleave', handleMouseLeave);
-        image.addEventListener('click', handleClick);
-        lens.style.backgroundImage = `url(${image.src})`;
-        lens.style.backgroundSize = `${image.width * ZOOM_LEVEL}px ${image.height * ZOOM_LEVEL}px`;
-      });
-
-      function handleMouseEnter(e) {
-        if (!isFreezed) {
-          lens.style.display = 'block';
-        }
-      }
-
-      function handleMouseLeave(e) {
-        if (!isFreezed) {
-          lens.style.display = 'none';
-        }
-      }
-
-      function handleMouseMove(e) {
-        const pos = getCursorPos(e, image);
-        updateCursorOutline(pos);
-        
-        if (!isFreezed) {
-          updateLensAndOutline(pos);
-        }
-      }
-
-      function handleClick(e) {
-        const pos = getCursorPos(e, image);
-        
-        if (!isFreezed) {
-          // Freeze the magnifier at current position
-          isFreezed = true;
-          freezePosition = pos;
-          updateLensAndOutline(pos);
-        } else {
-          // Unfreeze and return to dynamic mode
-          isFreezed = false;
-          freezePosition = null;
-          updateLensAndOutline(pos);
-        }
-      }
-
-      function updateCursorOutline(pos) {
-        const outlineX = Math.max(0, Math.min(pos.x - OUTLINE_SIZE / 2, image.width - OUTLINE_SIZE));
-        const outlineY = Math.max(0, Math.min(pos.y - OUTLINE_SIZE / 2, image.height - OUTLINE_SIZE));
-        
-        cursorOutline.style.left = `${outlineX}px`;
-        cursorOutline.style.top = `${outlineY}px`;
-      }
-
-      function updateLensAndOutline(pos) {
-        // Update the cursor outline position
-        const outlineX = Math.max(0, Math.min(pos.x - OUTLINE_SIZE / 2, image.width - OUTLINE_SIZE));
-        const outlineY = Math.max(0, Math.min(pos.y - OUTLINE_SIZE / 2, image.height - OUTLINE_SIZE));
-        
-        cursorOutline.style.left = `${outlineX}px`;
-        cursorOutline.style.top = `${outlineY}px`;
-        
-        // Calculate the background position to exactly match the outline area
-        const bgX = -(outlineX * ZOOM_LEVEL);
-        const bgY = -(outlineY * ZOOM_LEVEL);
-        lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
-      }
-
-      function getCursorPos(e, image) {
-        const rect = image.getBoundingClientRect();
-        return {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
-        };
-      }
-    }
   </script>
+
 </body>
 </html>
